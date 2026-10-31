@@ -28,3 +28,21 @@ jobs:
           path: .
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Notify Wheez dev group
+        if: always()
+        env:
+          OUTCOME: ${{ job.status }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WEBHOOK: ${{ secrets.NOVA_WEBHOOK_URL }}
+        run: |
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          FIRST_LINE=$(echo "$COMMIT_MSG" | head -1)
+          if [ "$OUTCOME" = "success" ]; then
+            TEXT=$(printf '✅ *wheez-landing* deployed\n🌐 wheez.civai.co\n📦 `%s` %s\n👤 %s' "$SHORT_SHA" "$FIRST_LINE" "$ACTOR")
+          else
+            TEXT=$(printf '❌ *wheez-landing* deploy failed\n📦 `%s` %s\n👤 %s\n🔗 %s' "$SHORT_SHA" "$FIRST_LINE" "$ACTOR" "$RUN_URL")
+          fi
+          jq -n --arg text "$TEXT" '{text:$text}' | curl -sS -X POST "$WEBHOOK" -H "Content-Type: application/json" -d @-
