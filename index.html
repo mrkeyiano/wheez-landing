@@ -512,11 +512,18 @@ class Component extends DCLogic {
     return fetch(this.API_BASE + path, Object.assign({}, opts, {headers})).then(async (r) => { let d = {}; try { d = await r.json(); } catch (e) {} if (!r.ok) throw new Error((d && d.error && d.error.message) || d.message || 'Something went wrong. Try again.'); return d; }); }
   componentDidMount(){ if (super.componentDidMount) super.componentDidMount();
     fetch(this.API_BASE + '/v1/public/banks').then((r) => r.json()).then((d) => this.setState({banks:d.items || []})).catch(() => {}); }
-  async file(e, cb, imgOnly, purpose){ const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return; const okT = imgOnly ? /^image\/(png|jpe?g|webp)$/ : /^(image\/(png|jpe?g)|application\/pdf)$/; if (!okT.test(f.type)) { cb(null, imgOnly ? 'Use a JPG, PNG or WebP image.' : 'Wrong file type. Use PDF, JPG or PNG.'); return; } if (f.size > 5 * 1024 * 1024) { cb(null, 'File too large. Max 5MB.'); return; }
-    let meta = {name:f.name, size:(f.size / 1024 / 1024).toFixed(1) + ' MB', url:null, pdf:f.type === 'application/pdf'};
+  async file(e, cb, imgOnly, purpose){ const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+    let contentType = f.type || '';
+    if ((!contentType || contentType === 'application/octet-stream') && /\.pdf$/i.test(f.name)) contentType = 'application/pdf';
+    if ((!contentType || contentType === 'application/octet-stream' || contentType === 'image/jpg') && /\.jpe?g$/i.test(f.name)) contentType = 'image/jpeg';
+    if (contentType === 'image/jpg') contentType = 'image/jpeg';
+    if ((!contentType || contentType === 'application/octet-stream') && /\.png$/i.test(f.name)) contentType = 'image/png';
+    if ((!contentType || contentType === 'application/octet-stream') && /\.webp$/i.test(f.name)) contentType = 'image/webp';
+    const okT = imgOnly ? /^image\/(png|jpeg|webp)$/ : /^(image\/(png|jpeg)|application\/pdf)$/; if (!okT.test(contentType)) { cb(null, imgOnly ? 'Use a JPG, PNG or WebP image.' : 'Wrong file type. Use PDF, JPG or PNG.'); return; } if (f.size > 5 * 1024 * 1024) { cb(null, 'File too large. Max 5MB.'); return; }
+    let meta = {name:f.name, size:(f.size / 1024 / 1024).toFixed(1) + ' MB', url:null, pdf:contentType === 'application/pdf'};
     if (!meta.pdf) { const url = await new Promise((res) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.readAsDataURL(f); }); meta = Object.assign({}, meta, {url}); }
     if (purpose) { if (!this.state.applicantToken) { cb(null, 'Verify your phone number first.'); return; }
-      try { const p = await this.apiFetch('/v1/public/uploads', {method:'POST', body:JSON.stringify({purpose, contentType:f.type, sizeBytes:f.size})});
+      try { const p = await this.apiFetch('/v1/public/uploads', {method:'POST', body:JSON.stringify({purpose, contentType, sizeBytes:f.size})});
         const r = await fetch(p.putUrl, {method:'PUT', headers:p.headers, body:f}); if (!r.ok) throw new Error('upload failed');
         meta = Object.assign({}, meta, {key:p.key}); } catch (err) { this.toast('Upload failed — try again.'); cb(null, 'Upload failed — try again.'); return; } }
     cb(meta); }
