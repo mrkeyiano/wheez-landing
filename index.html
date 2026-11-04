@@ -511,7 +511,21 @@ class Component extends DCLogic {
   apiFetch(path, opts){ opts = opts || {}; const headers = Object.assign({'content-type':'application/json'}, opts.headers || {}); if (this.state.applicantToken) headers.authorization = 'Bearer ' + this.state.applicantToken;
     return fetch(this.API_BASE + path, Object.assign({}, opts, {headers})).then(async (r) => { let d = {}; try { d = await r.json(); } catch (e) {} if (!r.ok) throw new Error((d && d.error && d.error.message) || d.message || 'Something went wrong. Try again.'); return d; }); }
   componentDidMount(){ if (super.componentDidMount) super.componentDidMount();
-    fetch(this.API_BASE + '/v1/public/banks').then((r) => r.json()).then((d) => this.setState({banks:d.items || []})).catch(() => {}); }
+    fetch(this.API_BASE + '/v1/public/banks').then((r) => r.json()).then((d) => this.setState({banks:d.items || []})).catch(() => {});
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const kind = params.get('resume_kind'), token = params.get('resume_token');
+      if ((kind === 'vendor' || kind === 'rider') && token) {
+        fetch(this.API_BASE + '/v1/public/applications/' + kind + '/resume/' + encodeURIComponent(token))
+          .then((r) => { if (!r.ok) throw new Error('expired'); return r.json(); })
+          .then((d) => {
+            if (kind === 'vendor') this.setState({page:'apply', step:d.step, v:Object.assign({}, this.freshV(), d.data, {phoneOk:false, otpSent:false, otp:'', otpChallengeId:''})});
+            else this.setState({page:'rideApply', rstep:d.step, r:Object.assign({}, this.freshR(), d.data, {phoneOk:false, otpSent:false, otp:'', otpChallengeId:''})});
+            this.toast("You're back! Pick up where you left off.");
+          })
+          .catch(() => this.toast('That resume link has expired or is invalid.'));
+      }
+    } catch (e) {} }
   async file(e, cb, imgOnly, purpose){ const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
     let contentType = f.type || '';
     if ((!contentType || contentType === 'application/octet-stream') && /\.pdf$/i.test(f.name)) contentType = 'application/pdf';
@@ -734,7 +748,11 @@ class Component extends DCLogic {
       chk:k => ({on:!!v[k], toggle:() => this.setV(k, !v[k])}), vConfirm:{on:v.confirm, bd:s.tried[5] && !v.confirm ? '#FF0000' : '#111', bg:v.confirm ? '#111' : '#fff', toggle:() => this.setV('confirm', !v.confirm)}, vAgree:{on:v.agree, bd:s.tried[5] && !v.agree ? '#FF0000' : '#111', bg:v.agree ? '#111' : '#fff', toggle:() => this.setV('agree', !v.agree)}, vTips:{on:v.tips, bd:'#111', bg:v.tips ? '#111' : '#fff', toggle:() => this.setV('tips', !v.tips)},
       submitV, submitting:s.submitting, notSubmitting:!s.submitting, submitL:s.submitting ? 'Submitting…' : 'Submit application', dupErr:s.submitErr === 'dup', netErr:s.submitErr === 'net', netFail:s.netFail, toggleNet:() => this.setState({netFail:!s.netFail}), netL:s.netFail ? 'On: next submit will fail' : 'Off',
       appId:s.appId, copyId:() => { try { navigator.clipboard.writeText(s.appId); } catch (e) {} this.toast('Application ID copied'); }, checkMine:() => { this.setState({st:{q:s.appId, otpSent:false, otp:'', result:null, err:''}}); this.go('status'); }, newApp:() => { this.setState({v:this.freshV(), step:0, tried:{}, vDone:false}); },
-      saveLater:s.saveLater, openSave:() => this.setState({saveLater:true, saveTo:v.email || v.phone}), closeSave:() => this.setState({saveLater:false}), saveTo:s.saveTo, onSaveTo:e => this.setState({saveTo:e.target.value}), doSave:() => { if (!this.emailOk(s.saveTo) && !this.phoneOk(this.digits(s.saveTo, 11))) { this.toast('Enter a valid email or phone'); return; } this.setState({saveLater:false}); this.toast('Resume link sent to ' + s.saveTo); },
+      saveLater:s.saveLater, openSave:() => this.setState({saveLater:true, saveTo:v.email || v.phone}), closeSave:() => this.setState({saveLater:false}), saveTo:s.saveTo, onSaveTo:e => this.setState({saveTo:e.target.value}), doSave:() => { const to = s.saveTo.trim(); if (!this.emailOk(to) && !this.phoneOk(this.digits(to, 11))) { this.toast('Enter a valid email or phone'); return; }
+        const kind = s.page === 'rideApply' ? 'rider' : 'vendor', data = kind === 'vendor' ? v : r, step = kind === 'vendor' ? s.step : s.rstep;
+        this.apiFetch('/v1/public/applications/' + kind + '/save-for-later', {method:'POST', body:JSON.stringify({contact:to, step, data})})
+          .then(() => { this.setState({saveLater:false}); this.toast('Resume link sent to ' + to); })
+          .catch((e) => this.toast(e.message || "Couldn't send the link. Try again.")); },
       rProg:prog(this.RSTEPS, s.rstep), rStepT:this.RSTEPS[s.rstep], rStepN:'Step ' + (s.rstep + 1) + ' of 5', rFields:rf, rIsReview:s.rstep === 4 && !s.rDone, rIsForm:s.rstep < 4 && !s.rDone, rDone:s.rDone, rNotDone:!s.rDone, rSum,
       rBack:() => s.rstep ? this.setState({rstep:s.rstep - 1}) : this.go('riders'), rBackL:s.rstep ? 'Back' : 'Cancel', rNext:() => { this.setState(st2 => ({rtried:{...st2.rtried, [s.rstep]:true}})); if (rValid) { this.setState({rstep:s.rstep + 1}); try { window.scrollTo({top:0}); } catch (e) {} } else this.toast('Fix the highlighted fields'); }, rNextBg:rValid ? '#FFC72C' : '#EFE9E3', rNextFg:rValid ? '#111' : '#9A928B', rNextBd:rValid ? '#111' : '#E2DDD8',
       rConfirm:{bd:s.rtried[4] && !r.confirm ? '#FF0000' : '#111', bg:r.confirm ? '#111' : '#fff', toggle:() => this.setR('confirm', !r.confirm)}, rAgree:{bd:s.rtried[4] && !r.agree ? '#FF0000' : '#111', bg:r.agree ? '#111' : '#fff', toggle:() => this.setR('agree', !r.agree)},
