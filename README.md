@@ -27,5 +27,6 @@ outside this repo.
 ## Mirror & deploy
 
 Same convention as the other wheez-* repos: `civai-technologies/wheez-landing` is the repo of
-record, mirrored to `mrkeyiano/wheez-landing` for dev access. No feature branches — push straight
-to `main`.
+record, mirrored to `mrkeyiano/wheez-landing` for dev access. Never push straight to `main` (branch
+rulesets block it): work on a feature branch, push it, open a PR with `gh pr create`, and merge
+it on GitHub. Merging the PR is the deploy.
